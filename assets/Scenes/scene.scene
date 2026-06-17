@@ -927,7 +927,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 465.0732421875,
+      "width": 0,
       "height": 214.2
     },
     "_anchorPoint": {
@@ -945,7 +945,7 @@
     "node": {
       "__id__": 20
     },
-    "_enabled": false,
+    "_enabled": true,
     "__prefab": null,
     "_customMaterial": null,
     "_srcBlendFactor": 2,
@@ -957,7 +957,7 @@
       "b": 255,
       "a": 255
     },
-    "_string": "YOU LOSE",
+    "_string": "",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 90,
