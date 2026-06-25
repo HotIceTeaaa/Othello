@@ -1,22 +1,28 @@
 import { _decorator, Component, Node, instantiate, Prefab, UITransform, EventTouch, Vec2, Vec3, Sprite, Color } from 'cc';
 import { OthelloGame, BLACK, WHITE, EMPTY, Player, Position } from './OthelloGame';
+
 const { ccclass, property } = _decorator;
 
 @ccclass('BoardView')
 export class BoardView extends Component {
     @property({ type: Prefab })
-    piecePrefab: Prefab = null!;    // drag piece prefab here
+    piecePrefab: Prefab = null!;    
 
     @property
-    cellSize: number = 90;          // pixels per cell
+    cellSize: number = 90;          
+
+    @property({ type: Component })
+    gameManager: Component = null!; 
 
     private game: OthelloGame = new OthelloGame();
-    private boardSize: number = 8;  // match game's size
+    private boardSize: number = 8;
+
+    public getGameLogic(): OthelloGame {
+        return this.game;
+    }
 
     onLoad() {
-        // Build the visual board initially
         this.redrawAllPieces();
-        // Listen for clicks on the board node
         this.node.on(Node.EventType.TOUCH_END, this.onBoardClick, this);
     }
 
@@ -24,49 +30,80 @@ export class BoardView extends Component {
         this.node.off(Node.EventType.TOUCH_END, this.onBoardClick, this);
     }
 
-    // --- Input handling ---
-    private onBoardClick(event: EventTouch) {
-        // Game over? ignore clicks
-        if (this.game.isGameOver()) return;
+   private onBoardClick(event: EventTouch) {
+        console.log("[BoardView] Papan game diklik!");
+
+        if (this.gameManager) {
+            const isSelected = (this.gameManager as any).isDifficultySelected;
+            if (!isSelected) {
+                console.log("[BoardView] Klik diabaikan karena papan masih terkunci!");
+                return;
+            }
+        }
+
+        // NEW! Proteksi: Abaikan klik jika bot sedang berpikir agar tidak terjadi tabrakan logika
+        const isBotThinking = (this.gameManager as any).isBotThinking;
+        if (isBotThinking) {
+            console.log("[BoardView] Bot sedang berpikir, klik diabaikan.");
+            return;
+        }
+
+        if (this.game.isGameOver()) {
+            console.log("[BoardView] Klik diabaikan karena game sudah selesai.");
+            return;
+        }
+        if (this.game.getCurrentPlayer() !== BLACK) {
+            console.log("[BoardView] Klik diabaikan karena sekarang bukan giliran Player (Hitam).");
+            return;
+        }
 
         const cell = this.screenToGrid(event);
-        if (!cell) return;
+        if (!cell) {
+            console.log("[BoardView] Klik di luar batas grid papan.");
+            return;
+        }
 
-        // Attempt to make a move
+        // NEW! Validasi aturan Othello: Cek apakah kotak yang diklik memang KOSONG 
+        // dan langkah tersebut sah (menghasilkan flips). Ini mencegah pemain menimpa keping.
+        if (!this.game.isValidMove(cell.row, cell.col, BLACK)) {
+            console.warn("[BoardView] Langkah TIDAK VALID: Kotak sudah terisi atau tidak bisa membalik bidak!");
+            return; 
+        }
+
+        console.log(`[BoardView] Player melangkah di baris: ${cell.row}, kolom: ${cell.col}`);
         const flips = this.game.makeMove(cell.row, cell.col);
+        
         if (flips) {
-            // Move was successful – redraw board (or animate flips)
+            console.log(`[BoardView] Langkah valid! Jumlah bidak yang dibalik: ${flips}`);
             this.redrawAllPieces();
-            // Check if next player needs to skip
+
+            if (this.gameManager && typeof (this.gameManager as any).updateScoreUI === 'function') {
+                (this.gameManager as any).updateScoreUI();
+            }
+
             this.game.skipTurnIfNeeded();
-            // If game is now over, you can show a message or log
-            if (this.game.isGameOver()) {
-                const winner = this.game.getWinner();
-                if (winner) {
-                    console.log(`Game over! ${winner === BLACK ? 'Black' : 'White'} wins!`);
-                } else {
-                    console.log('Game over! It’s a tie!');
+
+            if (this.gameManager) {
+                if (this.game.getCurrentPlayer() === WHITE && !this.game.isGameOver()) {
+                    console.log("[BoardView] Giliran berubah ke Bot (White). Memicu makeAIMove...");
+                    if (typeof (this.gameManager as any).makeAIMove === 'function') {
+                        (this.gameManager as any).makeAIMove();
+                    }
                 }
             }
-        } else {
-            // Invalid move – maybe play a sound or flash the cell
-            console.log('Invalid move');
         }
     }
 
-    // Convert screen touch coordinates to grid cell (row, col)
     private screenToGrid(event: EventTouch): { row: number; col: number } | null {
         const uiTransform = this.node.getComponent(UITransform);
         if (!uiTransform) return null;
 
-        const screenPos = event.getUILocation();           // returns Vec2
-        // Convert Vec2 to Vec3 (z = 0) for node‑space conversion
+        const screenPos = event.getUILocation();           
         const worldPos = new Vec3(screenPos.x, screenPos.y, 0);
-        const localPos = uiTransform.convertToNodeSpaceAR(worldPos); // returns Vec3
+        const localPos = uiTransform.convertToNodeSpaceAR(worldPos); 
 
         const boardPixelWidth = this.cellSize * this.boardSize;
         const boardPixelHeight = this.cellSize * this.boardSize;
-        // Shift so bottom‑left corner is (0,0)
         const x = localPos.x + boardPixelWidth / 2;
         const y = localPos.y + boardPixelHeight / 2;
 
@@ -79,9 +116,7 @@ export class BoardView extends Component {
         return null;
     }
 
-    // --- Visual rendering ---
-    private redrawAllPieces() {
-        // Remove all children (clear the board)
+    public redrawAllPieces() { 
         this.node.removeAllChildren();
         const board = this.game.getBoard();
 
@@ -101,18 +136,15 @@ export class BoardView extends Component {
         const piece = instantiate(this.piecePrefab);
         piece.parent = this.node;
 
-        // Calculate local position (center of cell)
         const pos = this.cellToLocal(row, col);
         piece.setPosition(pos.x, pos.y, 0);
 
-        // Set piece color
         const sprite = piece.getComponent(Sprite);
         if (sprite) {
             sprite.color = player === BLACK ? Color.BLACK : Color.WHITE;
         }
     }
 
-    // Convert grid (row,col) to local position based on anchor = 0.5
     private cellToLocal(row: number, col: number): Vec2 {
         const half = (this.boardSize - 1) / 2;
         const x = (col - half) * this.cellSize;
