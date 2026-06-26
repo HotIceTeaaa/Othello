@@ -123,7 +123,7 @@ export class GameManager extends Component {
 
             if (this.currentDifficulty === "hard") {
                 // HARD: Selalu yang terbaik (Alpha-Beta , Depth 5) tinggal diubah2 ?
-                chosenMove = this.getBestMoveAlphaBeta(validMoves, 7); 
+                chosenMove = this.getBestMoveAlphaBeta(validMoves, 20); 
             } else if (this.currentDifficulty === "normal") {
                 // NORMAL: Weight based (Roulette Wheel)
                 chosenMove = this.getWeightedRandomMove(validMoves);
