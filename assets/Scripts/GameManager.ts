@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Label, Node } from 'cc';
+import { _decorator, Color, Component, Label, Node, AudioSource, AudioClip } from 'cc';
 import { OthelloGame, WHITE, BLACK, EMPTY } from './OthelloGame'; 
 
 const { ccclass, property } = _decorator;
@@ -24,6 +24,26 @@ export class GameManager extends Component {
     //Status player menang kalah
     @property({ type: Label })
     statusLabel: Label = null!;
+
+    @property({ type: AudioClip })
+    moveClip: AudioClip = null!;
+
+    @property({ type: AudioClip })
+    winClip: AudioClip = null!;
+
+    @property({ type: AudioClip })
+    loseClip: AudioClip = null!; 
+
+    private playClip(clip: AudioClip) {
+        if (!clip) return;
+        const audioSource = this.node.getComponent(AudioSource) 
+                        ?? this.node.addComponent(AudioSource);
+        audioSource.playOneShot(clip, 1.0);
+    }
+
+    public playMoveSound() {
+        this.playClip(this.moveClip);
+    }
 
     private gameLogic: OthelloGame | null = null;
     public isDifficultySelected: boolean = false;
@@ -81,9 +101,9 @@ export class GameManager extends Component {
         if (this.scoreBotLabel) this.scoreBotLabel.string = `${score.white}`;
 
         if (this.gameLogic.isGameOver()) {
-        console.log("Game Over terdeteksi! Memanggil showGameOverUI...");
-        this.showGameOverUI(score);
-    }
+            console.log("Game Over terdeteksi! Memanggil showGameOverUI...");
+            this.showGameOverUI(score);
+        }
     }
 
     public makeAIMove() {
@@ -103,7 +123,7 @@ export class GameManager extends Component {
 
             if (this.currentDifficulty === "hard") {
                 // HARD: Selalu yang terbaik (Alpha-Beta , Depth 5) tinggal diubah2 ?
-                chosenMove = this.getBestMoveAlphaBeta(validMoves, 5); 
+                chosenMove = this.getBestMoveAlphaBeta(validMoves, 7); 
             } else if (this.currentDifficulty === "normal") {
                 // NORMAL: Weight based (Roulette Wheel)
                 chosenMove = this.getWeightedRandomMove(validMoves);
@@ -116,6 +136,8 @@ export class GameManager extends Component {
                 this.gameLogic?.makeMove(chosenMove.row, chosenMove.col);
                 const actualBoardScript = this.boardViewScript.node.getComponent("BoardView");
                 (actualBoardScript as any)?.redrawAllPieces();
+
+                this.playMoveSound();
                 
                 // 1. Update Score 
                 this.updateScoreUI(); 
@@ -148,7 +170,7 @@ export class GameManager extends Component {
     private getWeightedRandomMove(moves: { row: number, col: number }[]): { row: number, col: number } {
         let moveData = moves.map(move => {
             const board = this.simulateMove(this.gameLogic!.getBoard(), move.row, move.col, 2); // 2 = WHITE
-            let value = this.evaluateBoard(board);
+            let value = this.evaluateBoard(board, false);
             return { move, value };
         });
 
@@ -169,13 +191,16 @@ export class GameManager extends Component {
     }
 
     // --- ALGORITMA HARD: Alpha-Beta Pruning ---
+    // Refactor: alphabeta sekarang menerima currentPlayer secara eksplisit.
+    // WHITE = maximizing (bot), BLACK = minimizing (player).
     private getBestMoveAlphaBeta(moves: { row: number, col: number }[], depth: number): { row: number, col: number } {
         let bestMove = moves[0];
         let bestValue = -Infinity;
-        const currentBoard = this.gameLogic!.getBoard(); 
+        const currentBoard = this.gameLogic!.getBoard();
         for (let move of moves) {
+            // Bot (WHITE) sudah jalan, layer berikutnya giliran BLACK
             const nextBoard = this.simulateMove(currentBoard, move.row, move.col, WHITE);
-            let moveValue = this.alphabeta(nextBoard, depth - 1, -Infinity, Infinity, false);
+            let moveValue = this.alphabeta(nextBoard, depth - 1, -Infinity, Infinity, BLACK);
             if (moveValue > bestValue) {
                 bestValue = moveValue;
                 bestMove = move;
@@ -184,32 +209,80 @@ export class GameManager extends Component {
         return bestMove;
     }
 
-    private alphabeta(board: number[][], depth: number, alpha: number, beta: number, isMaximizing: boolean): number {
-        if (depth === 0) return this.evaluateBoard(board);
-        const moves = this.getSimulatedValidMoves(board, isMaximizing ? WHITE : BLACK);
-        if (moves.length === 0) return this.evaluateBoard(board);
+    // currentPlayer = siapa yang akan jalan di node ini
+    private alphabeta(board: number[][], depth: number, alpha: number, beta: number, currentPlayer: number): number {
+        const isMaximizing = currentPlayer === WHITE;
+        const opponent = currentPlayer === WHITE ? BLACK : WHITE;
+
+        if (depth === 0) return this.evaluateBoard(board, false);
+
+        const moves = this.getSimulatedValidMoves(board, currentPlayer);
+
+        if (moves.length === 0) {
+            const opponentMoves = this.getSimulatedValidMoves(board, opponent);
+            if (opponentMoves.length === 0) {
+                return this.evaluateEndgame(board);
+            }
+            // Pass turn: depth TIDAK dikurangi (tidak ada langkah nyata)
+            return this.alphabeta(board, depth, alpha, beta, opponent);
+        }
 
         if (isMaximizing) {
             let maxEval = -Infinity;
             for (let move of moves) {
-                maxEval = Math.max(maxEval, this.alphabeta(this.simulateMove(board, move.row, move.col, WHITE), depth - 1, alpha, beta, false));
-                alpha = Math.max(alpha, maxEval);
+                const nextBoard = this.simulateMove(board, move.row, move.col, WHITE);
+                let evalScore = this.alphabeta(nextBoard, depth - 1, alpha, beta, BLACK);
+                maxEval = Math.max(maxEval, evalScore);
+                alpha = Math.max(alpha, evalScore);
                 if (beta <= alpha) break;
             }
             return maxEval;
         } else {
             let minEval = Infinity;
             for (let move of moves) {
-                minEval = Math.min(minEval, this.alphabeta(this.simulateMove(board, move.row, move.col, BLACK), depth - 1, alpha, beta, true));
-                beta = Math.min(beta, minEval);
+                const nextBoard = this.simulateMove(board, move.row, move.col, BLACK);
+                let evalScore = this.alphabeta(nextBoard, depth - 1, alpha, beta, WHITE);
+                minEval = Math.min(minEval, evalScore);
+                beta = Math.min(beta, evalScore);
                 if (beta <= alpha) break;
             }
             return minEval;
         }
     }
 
-    private evaluateBoard(board: number[][]): number {
+    // Menghitung skor di akhir game secara langsung
+    private evaluateEndgame(board: number[][]): number {
+        let whiteCount = 0, blackCount = 0;
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if (board[r][c] === WHITE) whiteCount++;
+                else if (board[r][c] === BLACK) blackCount++;
+            }
+        }
+        
+        // Skoring mutlak: Kalau langkah ini bikin dia menang, kasih nilai besar
+        if (whiteCount > blackCount) return 99999 + whiteCount; 
+        if (blackCount > whiteCount) return -99999 - blackCount;
+        return 0; // draw
+    }
+
+    private evaluateBoard(board: number[][], isEndgame: boolean = false): number {
         let score = 0;
+
+        // Hitung jumlah keping untuk deteksi fase game
+        let totalPieces = 0;
+        let whiteCount = 0, blackCount = 0;
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if (board[r][c] === WHITE) { whiteCount++; totalPieces++; }
+                else if (board[r][c] === BLACK) { blackCount++; totalPieces++; }
+            }
+        }
+
+        // FASE ENDGAME (>= 54 keping, atau dipaksa dari luar): hitung keping nyata, bukan posisi
+        if (isEndgame || totalPieces >= 54) {
+            return (whiteCount - blackCount) * 1000;
+        }
         
         // 1. Positional Score (berdasarkan bobot sudut/tepi)
         for (let r = 0; r < 8; r++) {
@@ -219,15 +292,29 @@ export class GameManager extends Component {
             }
         }
 
-        // 2. Mobility Score (Sangat Penting untuk Hard)
-        // Hitung berapa langkah yang tersedia untuk bot dan untuk player
+        // 2. Mobility Score — makin banyak pilihan langkah = makin bagus
         const botMoves = this.getSimulatedValidMoves(board, WHITE).length;
         const playerMoves = this.getSimulatedValidMoves(board, BLACK).length;
-        
-        // Beri bobot lebih pada mobilitas
-        score += (botMoves - playerMoves) * 20; 
+        const totalMoves = botMoves + playerMoves;
+        if (totalMoves > 0) {
+            score += ((botMoves - playerMoves) / totalMoves) * 200;
+        }
+
+        // 3. Stability Score — sudut yang dikuasai bot adalah stabil dan sangat bernilai
+        score += this.countStableDiscs(board, WHITE) * 50;
+        score -= this.countStableDiscs(board, BLACK) * 50;
 
         return score;
+    }
+
+    // Hitung keping yang sudah "terkunci" (tidak bisa dibalik lagi), prioritas sudut
+    private countStableDiscs(board: number[][], player: number): number {
+        const corners = [[0,0],[0,7],[7,0],[7,7]];
+        let stable = 0;
+        for (const [r, c] of corners) {
+            if (board[r][c] === player) stable++;
+        }
+        return stable;
     }
 
     private simulateMove(currentBoard: number[][], row: number, col: number, player: number): number[][] {
@@ -283,9 +370,11 @@ export class GameManager extends Component {
         if (score.black > score.white) {
             this.statusLabel.string = "YOU WIN!";
             this.statusLabel.color = Color.GREEN;
+            this.playClip(this.winClip);
         } else if (score.white > score.black) {
             this.statusLabel.string = "YOU LOSE!";
             this.statusLabel.color = Color.RED;
+            this.playClip(this.loseClip);
         } else {
             this.statusLabel.string = "DRAW!";
             this.statusLabel.color = Color.WHITE;

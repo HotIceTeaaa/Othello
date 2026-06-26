@@ -176,7 +176,7 @@
     "_priority": 0,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 360,
+    "_orthoHeight": 375.09157509157507,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -531,7 +531,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 42.82373046875,
+      "width": 43,
       "height": 97.02
     },
     "_anchorPoint": {
@@ -663,7 +663,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 42.82373046875,
+      "width": 43,
       "height": 97.02
     },
     "_anchorPoint": {
@@ -795,7 +795,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 376.81640625,
+      "width": 377,
       "height": 75.6
     },
     "_anchorPoint": {
@@ -2058,6 +2058,18 @@
     },
     "statusLabel": {
       "__id__": 22
+    },
+    "moveClip": {
+      "__uuid__": "6328b8fe-981c-423e-94d6-23dae5acc7ef",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "winClip": {
+      "__uuid__": "f2d745b8-bf87-41db-9385-fd523fbd5c66",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "loseClip": {
+      "__uuid__": "40b2e1d8-e6e6-43ae-a2e0-52a284d26044",
+      "__expectedType__": "cc.AudioClip"
     },
     "_id": "2ce0Y2IMVLuZx/qMe4/+gk"
   },

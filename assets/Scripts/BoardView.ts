@@ -74,6 +74,11 @@ export class BoardView extends Component {
         const flips = this.game.makeMove(cell.row, cell.col);
         
         if (flips) {
+            const manager = this.gameManager as any;
+            if (manager && typeof manager.playMoveSound === 'function') {
+                manager.playMoveSound();
+            }
+            
             console.log(`[BoardView] Langkah valid! Jumlah bidak yang dibalik: ${flips}`);
             this.redrawAllPieces();
 
